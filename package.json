@@ -1,0 +1,44 @@
+{
+  "name": "spongepoop",
+  "version": "0.2.1",
+  "description": "npm package template generator",
+  "main": "main/index.js",
+  "scripts": {
+    "lint": "eslint main --ext .js,.jsx",
+    "prepublish": "npm run lint"
+  },
+  "bin": {
+    "poop": "main/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teefouad/spongepoop.git"
+  },
+  "keywords": [
+    "npm",
+    "package",
+    "template",
+    "generator"
+  ],
+  "author": "Mostafa <tee.fouad@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/teefouad/spongepoop/issues"
+  },
+  "homepage": "https://github.com/teefouad/spongepoop#readme",
+  "dependencies": {
+    "chalk": "^2.4.2",
+    "del": "^4.0.0",
+    "eslint": "^5.15.1",
+    "inquirer": "^6.2.2",
+    "minimist": "^1.2.0",
+    "ncp": "^2.0.0",
+    "rimraf": "^2.6.3"
+  },
+  "devDependencies": {
+    "eslint-config-airbnb": "^17.1.0",
+    "eslint-plugin-import": "^2.16.0",
+    "eslint-plugin-jsx-a11y": "^6.2.1",
+    "eslint-plugin-react": "^7.12.4"
+  }
+}
