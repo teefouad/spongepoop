@@ -1,15 +1,16 @@
 {
   "name": "spongepoop",
-  "version": "0.2.555",
+  "version": "0.2.6",
   "description": "npm package template generator",
   "main": "lib/index.js",
   "files": [
-    "templates/",
-    "lib/"
+    "templates",
+    "data",
+    "lib"
   ],
   "scripts": {
     "build": "npm run clean && npm run build:commonjs",
-    "build:commonjs": "babel src --out-dir lib",
+    "build:commonjs": "babel main --out-dir lib",
     "clean": "rimraf lib",
     "lint": "eslint main --ext .js,.jsx",
     "prepublishOnly": "npm run lint && npm run build"

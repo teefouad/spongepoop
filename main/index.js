@@ -128,8 +128,8 @@ if (options.help || options.h) {
 /* Configuration
 /* =================================== */
 
-const loadConfig = () => JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json')));
-const saveConfig = data => fs.writeFileSync(path.join(__dirname, 'config.json'), JSON.stringify(data, null, 2), 'utf8');
+const loadConfig = () => JSON.parse(fs.readFileSync(path.join(__dirname, '../data/config.json')));
+const saveConfig = data => fs.writeFileSync(path.join(__dirname, '../data/config.json'), JSON.stringify(data, null, 2), 'utf8');
 
 /**
  * Get configuration
