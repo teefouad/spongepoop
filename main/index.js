@@ -432,9 +432,11 @@ const installStorybook = type => new Promise(async (resolve, reject) => {
    * Check required configuration
    */
   if (!config.github.username) {
+    log('\n');
     printWithBadge('warning', 'GitHub username is not set.');
     log(chalk.gray('Git repository initialization will be skipped'));
     log(chalk.gray('For more information: poop --help'));
+    log('\n');
   }
 
   /**
