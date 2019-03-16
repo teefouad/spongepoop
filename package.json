@@ -5,7 +5,7 @@
   "main": "main/index.js",
   "scripts": {
     "lint": "eslint main --ext .js,.jsx",
-    "prepublish": "npm run lint"
+    "prepublishOnly": "npm run lint"
   },
   "bin": {
     "poop": "main/index.js"
