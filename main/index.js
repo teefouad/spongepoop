@@ -24,7 +24,6 @@ const {
 const packageDir = path.join(process.cwd(), args[0] || '');
 const packageName = path.basename(packageDir);
 const templatesDir = path.join(__dirname, '../templates');
-const templateFiles = fs.readdirSync(templatesDir);
 const versionRegex = /(?<major>\d+)\.?(?<minor>\d+)?\.?(?<patch>\d+)?(?<label>\w+)?/;
 
 /* =================================== */
@@ -237,12 +236,12 @@ const writeFile = (filePath, content) => promisify(fs.writeFile)(filePath, conte
 /* =================================== */
 
 const copyTemplateFiles = () => new Promise((resolve, reject) => {
-  const files = [...templateFiles];
+  const files = fs.readdirSync(templatesDir);
 
   (function copyTemplateFile(fileName) {
     copyFile(
       path.join(templatesDir, fileName),
-      path.join(packageDir, fileName),
+      path.join(packageDir, fileName.replace(/^\$/, '')),
     ).then(() => {
       if (files.length) {
         copyTemplateFile(files.shift());
@@ -256,7 +255,7 @@ const copyTemplateFiles = () => new Promise((resolve, reject) => {
 const templateFileHandlers = {};
 
 const processTemplateFiles = info => new Promise((resolve, reject) => {
-  const files = [...templateFiles].filter(fileName => typeof templateFileHandlers[fileName] !== 'undefined');
+  const files = fs.readdirSync(packageDir).filter(fileName => typeof templateFileHandlers[fileName] !== 'undefined');
 
   if (files.length === 0) resolve();
 

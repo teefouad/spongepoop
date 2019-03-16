@@ -1,8 +1,13 @@
 {
   "name": "spongepoop",
-  "version": "0.2.4",
+  "version": "0.2.555",
   "description": "npm package template generator",
   "main": "main/index.js",
+  "files": [
+    "templates/",
+    "main/",
+    "lib/"
+  ],
   "scripts": {
     "lint": "eslint main --ext .js,.jsx",
     "prepublishOnly": "npm run lint"
@@ -22,11 +27,6 @@
   ],
   "author": "Mostafa <tee.fouad@gmail.com>",
   "license": "MIT",
-  "files": [
-    "templates",
-    "src",
-    "lib"
-  ],
   "bugs": {
     "url": "https://github.com/teefouad/spongepoop/issues"
   },
