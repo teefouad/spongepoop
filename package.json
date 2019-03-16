@@ -1,6 +1,6 @@
 {
   "name": "spongepoop",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "npm package template generator",
   "main": "main/index.js",
   "scripts": {
@@ -22,6 +22,11 @@
   ],
   "author": "Mostafa <tee.fouad@gmail.com>",
   "license": "MIT",
+  "files": [
+    "templates",
+    "src",
+    "lib"
+  ],
   "bugs": {
     "url": "https://github.com/teefouad/spongepoop/issues"
   },
