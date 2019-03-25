@@ -525,7 +525,7 @@ const installStorybook = type => new Promise(async (resolve, reject) => {
     interval = ticker(chalk.white('Installing Storybook'));
 
     try {
-      await installStorybook(options.react ? 'react' : 'html');
+      await installStorybook(packageInfo.dependencies.react ? 'react' : 'html');
       log(chalk.gray('Storybook installed.'), true);
     } catch (e) {
       clearInterval(interval);
