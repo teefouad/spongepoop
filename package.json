@@ -1,6 +1,6 @@
 {
   "name": "spongepoop",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "npm package template generator",
   "main": "lib/index.js",
   "files": [
