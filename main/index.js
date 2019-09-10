@@ -115,6 +115,7 @@ To set your GitHub username:
 
 Args:
   --help, -h           Print this help
+  --version, -v        Print version number
   --react              Use React
   --typescript         Use TypeScript
   --storybook          Use StoryBook
@@ -122,6 +123,25 @@ Args:
 
 if (options.help || options.h) {
   printHelp();
+  process.exit(0);
+}
+
+/* =================================== */
+/* Version
+/* =================================== */
+
+const printVersion = () => {
+  const packageFile = fs.readFileSync(path.join(__dirname, '../package.json'));
+
+  try {
+    log(JSON.parse(packageFile).version);
+  } catch (e) {
+    printWithBadge('error', 'Invalid package file.');
+  }
+};
+
+if (options.version || options.v) {
+  printVersion();
   process.exit(0);
 }
 
