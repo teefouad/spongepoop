@@ -567,7 +567,7 @@ const installStorybook = dependencies => new Promise(async (resolve, reject) => 
     minor = 0,
     patch = 0,
     label = '',
-  ] = (packageInfo.packageVersion.match(versionRegex) || {}).groups;
+  ] = (packageInfo.packageVersion.match(versionRegex) || []);
 
   packageInfo.packageVersion = `${major}.${minor}.${patch}${label}`;
 
