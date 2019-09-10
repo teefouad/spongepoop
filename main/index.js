@@ -24,7 +24,7 @@ const {
 const packageDir = path.join(process.cwd(), args[0] || '');
 const packageName = path.basename(packageDir);
 const templatesDir = path.join(__dirname, '../templates');
-const versionRegex = /(?<major>\d+)\.?(?<minor>\d+)?\.?(?<patch>\d+)?(?<label>\w+)?/;
+const versionRegex = /(\d+)\.?(\d+)?\.?(\d+)?(\w+)?/;
 
 /* =================================== */
 /* Logging
@@ -116,8 +116,8 @@ To set your GitHub username:
 Args:
   --help, -h           Print this help
   --react              Use React
-  --storybook          Use StoryBook
   --typescript         Use TypeScript
+  --storybook          Use StoryBook
 `);
 
 if (options.help || options.h) {
@@ -384,28 +384,13 @@ const installReact = () => new Promise(async (resolve, reject) => {
 });
 
 /* =================================== */
-/* Storybook
-/* =================================== */
-
-const installStorybook = type => new Promise(async (resolve, reject) => {
-  try {
-    await run('npm install -D @storybook/cli');
-    await run(`./node_modules/.bin/sb init --type ${type}`);
-    await run('npm install');
-  } catch (e) {
-    reject(e);
-  }
-
-  resolve();
-});
-
-/* =================================== */
 /* TypeScript
 /* =================================== */
 
 const installTypeScript = () => new Promise(async (resolve, reject) => {
   try {
     await run('npm install -D typescript ts-loader');
+    await run('npm install -D @types/react @types/react-dom');
     await run('npm install -D @typescript-eslint/parser @typescript-eslint/eslint-plugin');
     await run('npm install -D eslint-config-airbnb-typescript');
     await run('npm install -D @babel/preset-typescript');
@@ -442,6 +427,41 @@ const installTypeScript = () => new Promise(async (resolve, reject) => {
     await renameFile(entryFilePath, 'src/index.ts');
 
     configWebpack(webpackConfig => webpackConfig.replace(/\.\/src\/index.js/g, './src/index.ts'));
+  } catch (e) {
+    reject(e);
+  }
+
+  resolve();
+});
+
+/* =================================== */
+/* Storybook
+/* =================================== */
+
+const installStorybook = dependencies => new Promise(async (resolve, reject) => {
+  try {
+    const type = dependencies.react === 'Yes' ? 'react' : 'html';
+    await run('npm install -D @storybook/cli');
+    await run('npm install -D @types/node');
+    await run(`./node_modules/.bin/sb init --type ${type}`);
+    await run('npm install');
+
+    if (dependencies.typescript === 'Yes') {
+      await copyFile(
+        path.join(templatesDir, '.storybook-typescript/webpack.config.js'),
+        path.join(packageDir, '.storybook/webpack.config.js'),
+      );
+
+      await copyFile(
+        path.join(templatesDir, '.storybook-typescript/config.js'),
+        path.join(packageDir, '.storybook/config.js'),
+      );
+
+      await renameFile(
+        path.join(packageDir, 'stories/index.stories.js'),
+        path.join(packageDir, 'stories/index.stories.tsx'),
+      );
+    }
   } catch (e) {
     reject(e);
   }
@@ -494,16 +514,16 @@ const installTypeScript = () => new Promise(async (resolve, reject) => {
       },
       {
         type: 'list',
-        name: 'dependencies.storybook',
-        message: 'Use Storybook?',
-        default: options.storybook ? 'Yes' : 'No',
+        name: 'dependencies.typescript',
+        message: 'Use TypeScript?',
+        default: options.typescript ? 'Yes' : 'No',
         choices: ['Yes', 'No'],
       },
       {
         type: 'list',
-        name: 'dependencies.typescript',
-        message: 'Use TypeScript?',
-        default: options.typescript ? 'Yes' : 'No',
+        name: 'dependencies.storybook',
+        message: 'Use Storybook?',
+        default: options.storybook ? 'Yes' : 'No',
         choices: ['Yes', 'No'],
       },
     ]);
@@ -522,12 +542,12 @@ const installTypeScript = () => new Promise(async (resolve, reject) => {
   /**
    * Clean up the version string
    */
-  const {
+  const [,
     major = 0,
     minor = 0,
     patch = 0,
     label = '',
-  } = (packageInfo.packageVersion.match(versionRegex) || {}).groups;
+  ] = (packageInfo.packageVersion.match(versionRegex) || {}).groups;
 
   packageInfo.packageVersion = `${major}.${minor}.${patch}${label}`;
 
@@ -614,29 +634,29 @@ const installTypeScript = () => new Promise(async (resolve, reject) => {
   }
 
   /**
-   * Storybook
-   */
-  if (packageInfo.dependencies.storybook === 'Yes') {
-    interval = ticker(chalk.white('Installing Storybook'));
-
-    try {
-      await installStorybook(packageInfo.dependencies.react ? 'react' : 'html');
-      log(chalk.gray('Storybook installed.'), true);
-    } catch (e) {
-      clearInterval(interval);
-      throw e;
-    }
-
-    clearInterval(interval);
-  }
-
-  /**
    * TypeScript
    */
   if (packageInfo.dependencies.typescript === 'Yes') {
     interval = ticker(chalk.white('Installing TypeScript'));
     await installTypeScript();
     log(chalk.gray('TypeScript installed.'), true);
+    clearInterval(interval);
+  }
+
+  /**
+   * Storybook
+   */
+  if (packageInfo.dependencies.storybook === 'Yes') {
+    interval = ticker(chalk.white('Installing Storybook'));
+
+    try {
+      await installStorybook(packageInfo.dependencies);
+      log(chalk.gray('Storybook installed.'), true);
+    } catch (e) {
+      clearInterval(interval);
+      throw e;
+    }
+
     clearInterval(interval);
   }
 
