@@ -260,6 +260,28 @@ const writeFile = (filePath, content) => promisify(fs.writeFile)(filePath, conte
 const renameFile = (filename, newFilename) => promisify(fs.rename)(filename, newFilename);
 
 /**
+ * Updates contents of a file
+ * @param {String} filePath Path to the file
+ * @param {Function} updater A function that receives old file contents and returns new file content
+ */
+const updateFile = (filePath, updater) => new Promise(async (resolve, reject) => {
+  try {
+    const content = await readFile(filePath);
+    const newContent = updater(content);
+    await writeFile(filePath, newContent);
+    resolve(newContent);
+  } catch (e) {
+    reject(e);
+  }
+});
+
+/**
+ * Reads a directory
+ * @param {String} dirPath Path to the directory
+ */
+const readDir = dirPath => promisify(fs.readdir)(dirPath, 'utf8');
+
+/**
  * Updates webpack configuration file based on the given callback return value
  */
 const configWebpack = callback => new Promise(async (resolve, reject) => {
@@ -472,15 +494,19 @@ const installStorybook = dependencies => new Promise(async (resolve, reject) => 
         path.join(packageDir, '.storybook/webpack.config.js'),
       );
 
-      await copyFile(
-        path.join(templatesDir, '.storybook-typescript/config.js'),
-        path.join(packageDir, '.storybook/config.js'),
-      );
+      const configFilePath = path.join(packageDir, '.storybook/config.js');
+      await updateFile(configFilePath, content => content.replace(/\\\.js\$/g, '\\.tsx$'));
 
-      await renameFile(
-        path.join(packageDir, 'stories/index.stories.js'),
-        path.join(packageDir, 'stories/index.stories.tsx'),
-      );
+      const stories = await readDir(path.join(packageDir, 'stories'));
+
+      stories.forEach(async (filename) => {
+        if (/\.js$/.test(filename)) {
+          await renameFile(
+            path.join(packageDir, `stories/${filename}`),
+            path.join(packageDir, `stories/${filename.replace(/\.js$/, '')}.tsx`),
+          );
+        }
+      });
     }
   } catch (e) {
     reject(e);
