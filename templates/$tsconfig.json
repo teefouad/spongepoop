@@ -1,12 +1,5 @@
 {
   "compilerOptions": {
-    "target": "es5",
-    "module": "es2015",
-    "sourceMap": true,
-    "strictNullChecks": true,
     "jsx": "react"
-  },
-  "exclude": [
-    "node_modules"
-  ]
+  }
 }
