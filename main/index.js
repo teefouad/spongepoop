@@ -116,6 +116,7 @@ To set your GitHub username:
 Args:
   --help, -h           Print this help
   --version, -v        Print version number
+  --yes, -y            Accept all options
   --react              Use React
   --typescript         Use TypeScript
   --storybook          Use StoryBook
@@ -228,18 +229,6 @@ const cleanDir = (dirPath, force = false) => new Promise((resolve, reject) => {
 });
 
 /**
- * Copies a file to a certain destination.
- * @param {String} filePath         Target file to copy
- * @param {String} destinationPath  Destination to copy the file to
- */
-const copyFile = (filePath, destinationPath) => new Promise((resolve, reject) => {
-  ncp(filePath, destinationPath, (err) => {
-    if (err) reject(err);
-    resolve();
-  });
-});
-
-/**
  * Reads from file
  * @param {String} filePath Path to the file
  */
@@ -253,22 +242,16 @@ const readFile = filePath => promisify(fs.readFile)(filePath, 'utf8');
 const writeFile = (filePath, content) => promisify(fs.writeFile)(filePath, content, 'utf8');
 
 /**
- * Renames a file
- * @param {String} filename Old filename
- * @param {String} newFilename  New filename
- */
-const renameFile = (filename, newFilename) => promisify(fs.rename)(filename, newFilename);
-
-/**
  * Updates contents of a file
  * @param {String} filePath Path to the file
  * @param {Function} updater A function that receives old file contents and returns new file content
  */
-const updateFile = (filePath, updater) => new Promise(async (resolve, reject) => {
+const updateFile = (filePath, updater, asJSON = false) => new Promise(async (resolve, reject) => {
   try {
+    const isJSON = asJSON || /\.json$/.test(filePath);
     const content = await readFile(filePath);
-    const newContent = updater(content);
-    await writeFile(filePath, newContent);
+    const newContent = updater(isJSON ? JSON.parse(content) : content);
+    await writeFile(filePath, isJSON ? JSON.stringify(newContent, null, 2) : newContent);
     resolve(newContent);
   } catch (e) {
     reject(e);
@@ -276,65 +259,39 @@ const updateFile = (filePath, updater) => new Promise(async (resolve, reject) =>
 });
 
 /**
- * Reads a directory
- * @param {String} dirPath Path to the directory
+ * Renames a file
+ * @param {String} filename Old filename
+ * @param {String} newFilename  New filename
  */
-const readDir = dirPath => promisify(fs.readdir)(dirPath, 'utf8');
+const renameFile = (filename, newFilename) => promisify(fs.rename)(filename, newFilename);
 
 /**
- * Updates webpack configuration file based on the given callback return value
+ * Copies a file to a certain destination.
+ * @param {String} filePath         Target file to copy
+ * @param {String} destinationPath  Destination to copy the file to
  */
-const configWebpack = callback => new Promise(async (resolve, reject) => {
-  try {
-    const webpackFilePath = path.join(packageDir, 'webpack.config.js');
-    const webpackConfig = await readFile(webpackFilePath);
-    const newWebpackConfig = callback(webpackConfig);
-    await writeFile(webpackFilePath, newWebpackConfig);
-  } catch (e) {
-    reject(e);
-  }
-
-  resolve();
-});
-
-/**
- * Injects a set of webpack rules into the configuration file
- */
-const injectWebpackRules = rules => configWebpack((webpackConfig) => {
-  const rulesMatch = webpackConfig.match(/rules\s*:\s*\[/);
-  const start = rulesMatch.index + rulesMatch[0].length;
-
-  let pointer = start - 1;
-  let brackets = 1;
-
-  while (brackets > 0) {
-    pointer += 1;
-    if (webpackConfig[pointer] === '[') brackets += 1;
-    if (webpackConfig[pointer] === ']') brackets -= 1;
-    if (pointer > webpackConfig.length - 1) {
-      pointer = -1;
-      break;
-    }
-  }
-
-  if (pointer === -1) {
-    throw new Error('Property `rules` was not found on webpack config');
-  }
-
-  const currentRules = webpackConfig.slice(start, pointer);
-  const newRules = `${currentRules}${rules}`.replace(/\n+\s+\n+/, '\n');
-  return `${webpackConfig.slice(0, start)}${newRules}${webpackConfig.slice(pointer)}`;
+const copyFile = (filePath, destinationPath) => new Promise((resolve, reject) => {
+  ncp(filePath, destinationPath, (err) => {
+    if (err) reject(err);
+    resolve();
+  });
 });
 
 /* =================================== */
 /* Templates
 /* =================================== */
 
+const templateFileHandlers = {};
+
+const addTemplateFileForProcessing = (filename, handler) => {
+  templateFileHandlers[filename] = typeof handler === 'function' ? handler : v => v;
+};
+
 const copyTemplateFiles = files => new Promise((resolve, reject) => {
-  (function copyTemplateFile(fileName) {
+  (function copyTemplateFile(filename) {
     copyFile(
-      path.join(templatesDir, fileName),
-      path.join(packageDir, fileName.replace(/^\$/, '')),
+      path.join(templatesDir, filename),
+      path.join(packageDir, filename.replace(/^\$/, '')),
     ).then(() => {
       if (files.length) {
         copyTemplateFile(files.shift());
@@ -345,45 +302,33 @@ const copyTemplateFiles = files => new Promise((resolve, reject) => {
   }(files.shift()));
 });
 
-const templateFileHandlers = {};
-
 const processTemplateFiles = info => new Promise((resolve, reject) => {
-  const files = fs.readdirSync(packageDir).filter(fileName => typeof templateFileHandlers[fileName] !== 'undefined');
+  const files = fs.readdirSync(packageDir).filter(filename => typeof templateFileHandlers[filename] !== 'undefined');
 
   if (files.length === 0) resolve();
 
-  (function processTemplateFile(fileName) {
-    const filePath = path.join(packageDir, fileName);
+  (async function processTemplateFile(filename) {
+    await updateFile(filename, (fileContent) => {
+      let processedContent = JSON.stringify(fileContent, null, 2)
+        .replace(/<github-username>/g, config.github.username || '<github-username>')
+        .replace(/<package-name>/g, info.packageName)
+        .replace(/<package-version>/g, info.packageVersion)
+        .replace(/<package-description>/g, info.packageDescription);
 
-    readFile(filePath)
-      .then((content) => {
-        let processedContent = content
-          .replace(/<github-username>/g, config.github.username || '<github-username>')
-          .replace(/<package-name>/g, info.packageName)
-          .replace(/<package-version>/g, info.packageVersion)
-          .replace(/<package-description>/g, info.packageDescription);
+      processedContent = templateFileHandlers[filename](processedContent, info);
 
-        processedContent = templateFileHandlers[fileName](processedContent, info);
+      return JSON.parse(processedContent);
+    }).catch(reject);
 
-        writeFile(filePath, processedContent)
-          .then(() => {
-            if (files.length) {
-              processTemplateFile(files.shift());
-            } else {
-              resolve();
-            }
-          })
-          .catch(reject);
-      })
-      .catch(reject);
+    if (files.length > 0) {
+      await processTemplateFile(files.shift());
+    } else {
+      resolve();
+    }
   }(files.shift()));
 });
 
-const addTemplateFileHandler = (filename, handler) => {
-  templateFileHandlers[filename] = typeof handler === 'function' ? handler : v => v;
-};
-
-addTemplateFileHandler('package.json', (content, info) => {
+addTemplateFileForProcessing('package.json', (content, info) => {
   const data = JSON.parse(content);
 
   if (!info.packageKeywords.trim()) {
@@ -395,7 +340,7 @@ addTemplateFileHandler('package.json', (content, info) => {
   return JSON.stringify(data, null, 2);
 });
 
-addTemplateFileHandler('README.md', true);
+addTemplateFileForProcessing('README.md');
 
 /* =================================== */
 /* React
@@ -404,20 +349,17 @@ addTemplateFileHandler('README.md', true);
 const installReact = () => new Promise(async (resolve, reject) => {
   try {
     await run('npm install react react-dom prop-types');
-    await run('npm install -D @babel/preset-react babel-loader');
+    fs.unlinkSync(path.join(packageDir, 'src/index.js'));
+    await copyFile(path.join(templatesDir, 'src/index.jsx'), path.join(packageDir, 'src/index.jsx'));
+    await updateFile(path.join(packageDir, 'index.html'), content => content.replace('src/index.js', 'src/index.jsx'));
+    await updateFile(path.join(packageDir, '.eslintrc'), (content) => {
+      const newContent = { ...content };
 
-    const babelFilePath = path.join(packageDir, '.babelrc');
-    const babelConfig = JSON.parse(await readFile(babelFilePath));
-    babelConfig.presets.push('@babel/preset-react');
-    await writeFile(babelFilePath, JSON.stringify(babelConfig, null, 2));
+      newContent.rules['import/extensions'][2].jsx = 'never';
+      newContent.settings['import/resolver'].node.extensions.push('.jsx');
 
-    await injectWebpackRules(`
-      {
-        test: /\\.js(x?)$/,
-        exclude: /node_modules/,
-        use: ['babel-loader'],
-      },
-    `);
+      return newContent;
+    }, true);
   } catch (e) {
     reject(e);
   }
@@ -429,46 +371,49 @@ const installReact = () => new Promise(async (resolve, reject) => {
 /* TypeScript
 /* =================================== */
 
-const installTypeScript = () => new Promise(async (resolve, reject) => {
+const installTypeScript = dependencies => new Promise(async (resolve, reject) => {
   try {
-    await run('npm install -D typescript ts-loader');
-    await run('npm install -D @types/react @types/react-dom');
-    await run('npm install -D @typescript-eslint/parser @typescript-eslint/eslint-plugin');
-    await run('npm install -D eslint-config-airbnb-typescript');
-    await run('npm install -D @babel/preset-typescript');
+    let sourceFile = 'src/index.js';
+    let typescriptSourceFile = 'src/index.ts';
 
-    const eslintFilePath = path.join(packageDir, '.eslintrc');
-    const eslintConfig = JSON.parse(await readFile(eslintFilePath));
-    eslintConfig.parser = '@typescript-eslint/parser';
-    eslintConfig.extends = 'airbnb-typescript';
-    eslintConfig.plugins = eslintConfig.plugins || [];
-    eslintConfig.plugins.push('@typescript-eslint');
-    await writeFile(eslintFilePath, JSON.stringify(eslintConfig, null, 2));
+    if (options.react || dependencies.react === 'Yes') {
+      sourceFile = 'src/index.jsx';
+      typescriptSourceFile = 'src/index.tsx';
+    }
 
-    const packageFilePath = path.join(packageDir, 'package.json');
-    const packageConfig = JSON.parse(await readFile(packageFilePath));
-    packageConfig.scripts.lint = packageConfig.scripts.lint.replace(/\.js/g, '.ts');
-    await writeFile(packageFilePath, JSON.stringify(packageConfig, null, 2));
+    fs.unlinkSync(path.join(packageDir, sourceFile));
 
-    const babelFilePath = path.join(packageDir, '.babelrc');
-    const babelConfig = JSON.parse(await readFile(babelFilePath));
-    babelConfig.presets.push('@babel/preset-typescript');
-    await writeFile(babelFilePath, JSON.stringify(babelConfig, null, 2));
+    await copyFile(
+      path.join(templatesDir, typescriptSourceFile),
+      path.join(packageDir, typescriptSourceFile),
+    );
 
-    await injectWebpackRules(`
-      {
-        test: /\\.ts(x?)$/,
-        exclude: /node_modules/,
-        use: ['ts-loader'],
-      },
-    `);
+    await updateFile(path.join(packageDir, 'index.html'), content => content.replace(sourceFile, typescriptSourceFile));
+    await updateFile(path.join(packageDir, 'package.json'), (content) => {
+      const newContent = { ...content };
+      newContent.scripts.lint = newContent.scripts.lint.replace(/js/g, 'ts');
+      return newContent;
+    });
+    await updateFile(path.join(packageDir, '.eslintrc'), (content) => {
+      const newContent = { ...content };
 
-    await copyTemplateFiles(['$tsconfig.json']);
+      delete newContent.rules['import/extensions'][2].js;
+      newContent.rules['import/extensions'][2].ts = 'never';
+      newContent.settings['import/resolver'].node.extensions[0] = '.ts';
 
-    const entryFilePath = path.join(packageDir, 'src/index.js');
-    await renameFile(entryFilePath, 'src/index.ts');
+      if (options.react || dependencies.react === 'Yes') {
+        delete newContent.rules['import/extensions'][2].jsx;
+        newContent.rules['import/extensions'][2].tsx = 'never';
+        newContent.settings['import/resolver'].node.extensions[1] = '.tsx';
+      }
 
-    configWebpack(webpackConfig => webpackConfig.replace(/\.\/src\/index.js/g, './src/index.ts'));
+      return newContent;
+    }, true);
+    await renameFile(path.join(packageDir, 'tests/index.test.js'), path.join(packageDir, 'tests/index.test.ts'));
+    await copyFile(path.join(templatesDir, '$tsconfig.json'), path.join(packageDir, 'tsconfig.json'));
+    await run('npm install -D typescript');
+    await run('npm install -D ts-jest @types/jest');
+    await run('npx ts-jest config:init');
   } catch (e) {
     reject(e);
   }
@@ -482,32 +427,9 @@ const installTypeScript = () => new Promise(async (resolve, reject) => {
 
 const installStorybook = dependencies => new Promise(async (resolve, reject) => {
   try {
-    const type = dependencies.react === 'Yes' ? 'react' : 'html';
+    const type = (options.react || dependencies.react === 'Yes') ? 'react' : 'html';
     await run('npm install -D @storybook/cli');
-    await run('npm install -D @types/node');
     await run(`./node_modules/.bin/sb init --type ${type}`);
-    await run('npm install');
-
-    if (dependencies.typescript === 'Yes') {
-      await copyFile(
-        path.join(templatesDir, '.storybook-typescript/webpack.config.js'),
-        path.join(packageDir, '.storybook/webpack.config.js'),
-      );
-
-      const configFilePath = path.join(packageDir, '.storybook/config.js');
-      await updateFile(configFilePath, content => content.replace(/\\\.js\$/g, '\\.tsx$'));
-
-      const stories = await readDir(path.join(packageDir, 'stories'));
-
-      stories.forEach(async (filename) => {
-        if (/\.js$/.test(filename)) {
-          await renameFile(
-            path.join(packageDir, `stories/${filename}`),
-            path.join(packageDir, `stories/${filename.replace(/\.js$/, '')}.tsx`),
-          );
-        }
-      });
-    }
   } catch (e) {
     reject(e);
   }
@@ -572,7 +494,7 @@ const installStorybook = dependencies => new Promise(async (resolve, reject) => 
         default: options.storybook ? 'Yes' : 'No',
         choices: ['Yes', 'No'],
       },
-    ]);
+    ].filter(question => !(question.name.match(/^dependencies\./) && options[question.name.split('.')[1]])));
 
   /**
    * Check required configuration
@@ -581,6 +503,10 @@ const installStorybook = dependencies => new Promise(async (resolve, reject) => 
     log('\n');
     printWithBadge('warning', 'GitHub username is not set.');
     log(chalk.gray('Git repository initialization will be skipped'));
+    log('\n');
+    log(chalk.gray('To set your GitHub username:'));
+    log(chalk.gray(`  poop config --github.username="${chalk.gray('<your-username>')}"`));
+    log('\n');
     log(chalk.gray('For more information: poop --help'));
     log('\n');
   }
@@ -603,8 +529,11 @@ const installStorybook = dependencies => new Promise(async (resolve, reject) => 
   if (!fs.existsSync(packageDir)) {
     fs.mkdirSync(packageDir);
   } else {
-    await cleanDir(packageDir, options.f || options.force);
+    await cleanDir(packageDir, options.force || options.f);
   }
+
+  fs.mkdirSync(path.join(packageDir, 'src'));
+  fs.mkdirSync(path.join(packageDir, 'tests'));
 
   /**
    * Copy template files to target directory then process them
@@ -612,27 +541,83 @@ const installStorybook = dependencies => new Promise(async (resolve, reject) => 
   log(chalk.white('\nPooping files...'), false, false);
 
   const templateFiles = [
-    'src',
+    'src/index.js',
     'tests',
-    '$.babelrc',
     '$.editorconfig',
     '$.eslintrc',
     '$.gitignore',
     '$.travis.yml',
+    '$index.html',
     '$LICENSE',
     '$package.json',
     '$README.md',
-    '$webpack.config.js',
   ];
 
   try {
-    await copyTemplateFiles(templateFiles);
-    await processTemplateFiles(packageInfo);
     log(chalk.gray('Pooping files...'), true);
+
+    await copyTemplateFiles(templateFiles)
+      .catch(e => log(chalk.red('Could not copy template files!', e)));
+
+    await processTemplateFiles(packageInfo)
+      .catch(e => log(chalk.red('Could not process template files!', e)));
   } catch (e) {
     log(`\n\nError:\n${e.message}\n`);
     printWithBadge('error', 'Something went wrong, please contact the author.');
     process.exit(1);
+  }
+
+  clearInterval(interval);
+
+  /**
+   * React
+   */
+  if (options.react || packageInfo.dependencies.react === 'Yes') {
+    interval = ticker(chalk.white('Installing React'));
+    await installReact(packageInfo.dependencies);
+    log(chalk.gray('React installed.'), true);
+    clearInterval(interval);
+  }
+
+  /**
+   * TypeScript
+   */
+  if (options.typescript || packageInfo.dependencies.typescript === 'Yes') {
+    interval = ticker(chalk.white('Installing TypeScript'));
+    await installTypeScript(packageInfo.dependencies);
+    log(chalk.gray('TypeScript installed.'), true);
+    clearInterval(interval);
+  }
+
+  /**
+   * Storybook
+   */
+  if (options.storybook || packageInfo.dependencies.storybook === 'Yes') {
+    interval = ticker(chalk.white('Installing Storybook'));
+
+    try {
+      await installStorybook(packageInfo.dependencies);
+      log(chalk.gray('Storybook installed.'), true);
+    } catch (e) {
+      clearInterval(interval);
+      throw e;
+    }
+
+    clearInterval(interval);
+  }
+
+  /**
+   * Handle and install dependencies
+   */
+
+  interval = ticker(chalk.white('Installing dependencies'));
+
+  try {
+    await run('npm install');
+    log(chalk.gray('Dependencies installed.'), true);
+  } catch (e) {
+    clearInterval(interval);
+    throw e;
   }
 
   clearInterval(interval);
@@ -645,62 +630,11 @@ const installStorybook = dependencies => new Promise(async (resolve, reject) => 
 
     try {
       await run('git init');
+      await run('git add .');
+      await run('git commit -m "Initial commit"');
       log(chalk.gray('Initialized git repository.'), true);
     } catch (e) {
       printWithBadge('warning', 'Could not initialize a git repository.');
-    }
-
-    clearInterval(interval);
-  }
-
-  /**
-   * Handle and install dependencies
-   */
-  interval = ticker(chalk.white('Installing dependencies'));
-
-  try {
-    process.chdir(packageDir);
-    await run('npm install');
-    log(chalk.gray('Dependencies installed.'), true);
-  } catch (e) {
-    clearInterval(interval);
-    throw e;
-  }
-
-  clearInterval(interval);
-
-  /**
-   * React
-   */
-  if (packageInfo.dependencies.react === 'Yes') {
-    interval = ticker(chalk.white('Installing React'));
-    await installReact();
-    log(chalk.gray('React installed.'), true);
-    clearInterval(interval);
-  }
-
-  /**
-   * TypeScript
-   */
-  if (packageInfo.dependencies.typescript === 'Yes') {
-    interval = ticker(chalk.white('Installing TypeScript'));
-    await installTypeScript();
-    log(chalk.gray('TypeScript installed.'), true);
-    clearInterval(interval);
-  }
-
-  /**
-   * Storybook
-   */
-  if (packageInfo.dependencies.storybook === 'Yes') {
-    interval = ticker(chalk.white('Installing Storybook'));
-
-    try {
-      await installStorybook(packageInfo.dependencies);
-      log(chalk.gray('Storybook installed.'), true);
-    } catch (e) {
-      clearInterval(interval);
-      throw e;
     }
 
     clearInterval(interval);
